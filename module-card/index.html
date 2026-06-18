@@ -1,0 +1,1502 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モジュールカード</title>
+  <!-- html2canvas は PNG保存時に動的ロード -->
+  <style>
+    :root {
+      --primary: #0277bd;
+      --primary-dark: #01579b;
+      --primary-light: #29b6f6;
+      --bg: #f0f9ff;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #bae6fd;
+      --tag-bg: #e0f2fe;
+      --tag-text: #0369a1;
+      --input-bg: #f8fafc;
+      --shadow: rgba(0,0,0,0.10);
+      --theme-btn-bg: #e0f2fe;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --tag-bg: #164e63;
+      --tag-text: #38bdf8;
+      --input-bg: #0f172a;
+      --shadow: rgba(0,0,0,0.40);
+      --theme-btn-bg: #1e3a4a;
+    }
+
+    /* SVGパズル：ダークモード */
+    html[data-theme="dark"] #pz-body { fill: #0c3d52; stroke: #38bdf8; }
+    html[data-theme="dark"] #card-export svg text { fill: #7dd3fc; }
+    html[data-theme="dark"] #card-export svg line { stroke: #7dd3fc; }
+    html[data-theme="dark"] #card-export svg polygon { fill: #7dd3fc; }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    input, textarea {
+      color: var(--text);
+    }
+
+    body {
+      font-family: 'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .screen {
+      display: none;
+    }
+
+    .app-wrap {
+      max-width: 400px;
+      margin: 0 auto;
+      padding: 16px 16px 80px;
+    }
+
+    /* プレビュー画面 — 要素グリッド */
+    .elements-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .el { border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+    .el-h { padding:5px 8px; font-size:12px; font-weight:bold; background:#0277bd; color:white; }
+    .el-d { padding:2px 7px; font-size:11px; line-height:1.3; background:var(--tag-bg); color:var(--tag-text); }
+    .el-c { padding:6px 8px; font-size:12px; min-height:40px; line-height:1.5; color:var(--text); }
+    .calling .el-h { background:#01579b; }
+    .ku .el-h { background:#0288d1; }
+
+    /* テーマ切替ボタン */
+    :focus-visible {
+      outline: 2px solid var(--primary-dark);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+
+    #theme-toggle {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 200;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--theme-btn-bg);
+      color: var(--text);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px var(--shadow);
+      transition: background 0.2s;
+    }
+  </style>
+</head>
+<body>
+  <!-- テーマ切替ボタン（全画面共通・固定） -->
+  <button id="theme-toggle" onclick="toggleTheme()" aria-label="ダーク/ライトモード切替">🌙</button>
+
+  <div id="setup-screen" class="screen"></div>
+  <div id="main-screen" class="screen"></div>
+  <div id="question-screen" class="screen"></div>
+  <div id="preview-screen" class="screen"></div>
+  <div id="history-screen" class="screen"></div>
+
+  <script>
+    const ELEMENT_KEYS = ['kaze','tama','hand','core','ku','calling'];
+
+    const ELEMENT_META = {
+      kaze: {
+        icon: '🌬',
+        name: '風',
+        label: 'わたしの "風"',
+        tag: '止められてもやりたい、生まれ持っての関心',
+        desc: '本能的衝動。好きで好きで仕方ないこと。'
+      },
+      tama: {
+        icon: '💎',
+        name: '玉',
+        label: 'わたしの "玉"',
+        tag: '社会で磨いた役割・技術・経験',
+        desc: 'やっていたらうまくなった。スキル、専門性、できること。'
+      },
+      hand: {
+        icon: '🤲',
+        name: 'ハンド',
+        label: 'わたしの "ハンド"',
+        tag: '他者に手を差し伸べられるスキル',
+        desc: '自然と提供できる優しさ。'
+      },
+      core: {
+        icon: '🎯',
+        name: 'コア',
+        label: 'わたしの "コア"',
+        tag: '変わらない自分の本質',
+        desc: '性質、タイプ、本質、根本的なクセ。'
+      },
+      ku: {
+        icon: '○',
+        name: '空',
+        label: 'わたしの "空"',
+        tag: '他者が才能を発揮する空白・自分の苦手領域',
+        desc: '苦手＝委ねる領域。'
+      },
+      calling: {
+        icon: '✨',
+        name: 'コーリング',
+        label: 'わたしの "コーリング"',
+        tag: '魂からの問い 生涯かけて取り組む探求',
+        desc: '使命と呼べる領域。人生をかけて探究し続ける「問い」。'
+      }
+    };
+
+    const QUESTIONS = {
+      kaze: [
+        '最近、時間を忘れていた瞬間は、どんな時?',
+        '説明できないけど「なんか良かった」瞬間は?',
+        '理由を聞かれると困る「好き」はある?',
+        '誰に見せなくても「やりたいこと」は?',
+        '気づいたら「調べてしまうテーマ」は?',
+        '時間を忘れて夢中になった体験は?',
+        'それをしているとき、身体はどんな感じ?',
+        'それに触れているとき、世界はどう見える?',
+        '止められても、やっちゃうことは?',
+        '損得なしに、やり続けてしまうことは?',
+        '評価されなくても、やっていることは?',
+        '子どもの頃から、形を変えながらも続いている関心は?',
+        'やめようとしても「戻ってくる」ことは?',
+      ],
+      tama: [
+        '上手い・下手・役に立つとは関係なく、やってしまうことは?',
+        '頼まれると「まあ、できるか」と思えることは?',
+        '気づいたら「頼まれがちなこと」は?',
+        '他人から頼られる技術や知識などは?',
+        '好きかどうかは別として「できてしまうこと」は?',
+        '経験を積むうちに「身についたこと」は?',
+        '仕事として「得意」なことは?',
+        '人に教えたことがある分野は?',
+        '他の人より説明がうまくできる分野は?',
+        '学び続けてきたスキルは?',
+        '学んできた中で、今も使っているスキルは?',
+        '努力して身につけた能力は?',
+        '自然に整理・構造化してしまうことは?',
+        '再現性がある「できること」は?',
+      ],
+      hand: [
+        'よく「感謝される」ことは?',
+        '感謝されるけど、自分では大したことないと思ってることは?',
+        '「それ、助かる」とよく言われる行動は?',
+        '場にいると「自然にやってしまうこと」は?',
+        'つい先回りしてしまうことは?',
+        '人を助けるとき、自然にやってることは?',
+        '相手が楽になった瞬間、そのとき自分は何をしている?',
+        'なぜか「任されやすい」ことは?',
+        '気づいたら引き受けている役割は?',
+        '人の代わりに「引き受けがちなこと」は?',
+        'いなくなると「困る」と言われる部分は?',
+        '誰かの負担を減らしている行為は?',
+        'その役割を担っているとき、どんな感覚?',
+      ],
+      core: [
+        '「私らしい」と感じるときの私は?',
+        '「あなたらしいね」とよく言われる瞬間は?',
+        '自然体のとき、どんな空気をまとってる?',
+        '何をしているときが一番自然?',
+        '調子がいいときの共通点は?',
+        '調子が悪いときに失われているものは?',
+        '「今、無理しているな」そう感じるのはどんなとき?',
+        '無理していないときの自分はどんな感じ?',
+        '頑張らなくても「出てしまう性質」は?',
+        '昔から「周りに言われがちな特徴」は?',
+        '環境が変わっても「変わらないもの」は?',
+        '年齢が変わっても「変わらないこと」は?',
+        'どんな「私」だと、ラクでいられる?',
+        '「らしいね」と言われるとしたら?',
+      ],
+      ku: [
+        'やらなくていいなら「正直やりたくないこと」は?',
+        'できれば「誰かに任せたいこと」は?',
+        '無理すると「消耗する役割」は?',
+        '正直、あまり触りたくないことは?',
+        '昔から変わらず「避けてきたこと」は?',
+        '誰かがやってくれると、心からありがたいことは?',
+        '頑張るほど「ズレる感じがある」ことは?',
+        '何度やっても上達しにくいことは?',
+        '「それは得意じゃない」と言いたくなる領域は?',
+        '手放したらラクになりそうなことは?',
+        '苦手だけど、続けてきたことは?',
+        '誰かに委ねたほうがうまく回ることは?',
+        '今、誰かに任せたら一番ラクになることは?',
+      ],
+    };
+
+    // ─── APIキー取得ガイド画像 ────────────────────────────────────────
+    const GUIDE_IMGS = {
+      create: 'data:image/png;base64,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',
+      copy:   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAK8AAABKCAIAAABCeZMTAAAMjklEQVR4Aeybd4wctR7Hbc/u3qVRH5DQItCjI/6giSIQQoAACSFA9CJAIARCQgLBo4hehSjpUhSlKdFTEqUnSpTee1eUogSlvjSll8vd7c6O38czd3tlby+3s3ObzZ19Hq/HY/9sf/2d3+9nT6K629BuELj++uu7du3WtWvXbjmCEjZYBGoRsGyoRcL+CmHZYFlQh4BlQx0WNmfZYDlQh4BlQx0WNmfZUMocKPbYLBuKjXgp92fZUMqrU+yxWTYUG/FS7s+yoZRXp9hjs2woNuKl3J9lQymvTrHHZtlQbMRLuD9p2ZDP6rTNulIIKaSJlg2iHQcphBSSoKQkSssG0V4DPBAQwUQFFRwlY5YN7ZMMPhWEEtLwQKqYcuIqFlftE4z2PWsphJSGCnDBkSquVMKJlTvxDpYNoj0GyCClko4wKiHhxMudRMdYorOKHAvHcTp27Hj++edfdNFF/7KhAAQAEBgBE0ijWyYpZBAc4RsIxymPJTrGE50T5ZGyIZFIMPoLLrigvLw8FovRp7ahAAQAEBgBE0gBFngj4QR0EIYRSilHOUYxxOId42Wd4mURsYFxd/EDoxfCdCWKEtpDJ2DLNAHWB7hLcEtJQVFCCSXQDTgNPiEwFnBCFSTUb8xAIW9ZWZl/Z5NWRACQgRrAw/chTdMgkSYoiYZQMQdOFL6nYGQoMaUUGtH0Y6/WRACQgRrAgT2qfqCEUebKp0UhQhGE+ipEgm0bDgFgB/xwbbNaoSlqYkGWonPnzpG6u1njtAU5EAB2wM/xsOXFSrDNRDMoaYIQquVNG9XExSWiuxqV29siIADsgE/Mvy/J6tNKGtOA2XGkw+4vJqRhgrl4FiJ26NAhRCvbJEIEwi6BlNLxY1xy+sS2QnErhdAh2eA4ToSOTIQAtStRLAELkeeUpZBCSEn01UNMqZiUSsIF7YVkA1sdlJVoHOx9URFgCViIUF1KIQmQQAlpBGjtaS+tTDb/Kx6PIyz/djUt7rzzzvfff/+NN96ouW+Fn5tvvvk/frjhhhtaQXxOkddee23v3r2nTZv27bffcqics14UD1gCFiKUJC00wdM67XlE13OTxJBsyF9BNRjz/fffDxUefPDBBqWR3nTr1u3RRx+9++67q6qqIhVshP35559z58799NNPzU3D66233uLTxNChQ2+//XbyDR9Gf5f/QsADrIIHGzzP9dKQoCqdqnTdqpRbFZINOKOFzGz79u3V1dUXXnhh9+7dAznwA21x6623BrfhUoQMGjRo2LBhP//887PPPtupUye2Yb/++uu4ceNYvIULF/bt2zdb8rvvvvvfZsPw4cNfffXV+g35dsB736RLz1nhzp07x48ff+LEifPOO69+q9bIh1oIT2vP81IaKqSq3OTpVPUpolt9KiQbCpkYOMLoysrKSy+99I8//pg1a9bSpUv//vvvV155hfepEMkc0qGoMQ1ohbvuuoteINxVV11F6rru//yQLZ9h/LvZcM0118Cq7IZNlmzevPmee+6ZOnUqTebNm9dknbNZqAnoBS18xeC6lW6qIpU8law6mawqFhuuuOKKHj16TJ8+ff78+XPmzPniiy8uvvhiPCB0A2/YwYMHN2zYQPmhQ4cKQWrKlCkPPfQQ1gFNDts2bdrE7QMPPED6yCOPvPTSS+iJbPloju9yh127dmU3yS657LLLsAtjx47FAq5du/ajjz565plnFi9enF2zBEq00KiHtNENrtENbnWFi3pIFosNe/bs4V3h3QWLvXv3Ll++fMuWLbCUlWC1nnrqKaD85ptvWE4qFBhRD08//TRCVq1a9cEHHzz33HNoI26J6B5IiR0hn4kbN26k31wRpZKpmZ2BBCz/0KFDx4wZg6WD9EePHoXc+/bty65cGiVQQZvL8zwNIVJeujqdqgxi8SxFnz59Xn75ZTxHXpoPP/xwxYoVnuddffXVuTBi3wE/cr+0dU/ee++9+kJef/11CMHJzGuvvfbCCy989tlnAwYMePHFF4cMGYLfcN99991yyy0Ir98kXP6JJ56YMGECc7npppsgDeRD9zz++OOw7cCBAxmZwe6mbri5c5988kmmVStkMiINGbTwBAugXe2l8CF8dzJZPDagP7dt25YZEW9PMpnEXvB6Pfzwwx9//DF0mTRp0vfffx/UwZxT/mQLwm233RY0IeUFxWlgbWbOnPnmm2++/fbb+HTXXXcdQN94443kIQQOysqVK6lcYOTw59ixY/inX3/9NcaIrnEes2WimdB/LZjHk/g62c1bp0QL/oy90NrziOYKffoUeois/WOPPcbas9J4eeiGiRMn/vbbbxh17D1PcfoC4cePH4c9/7Qg4B0GTXhNcf6hAqr7yy+/xKXnxAHXxPO8JUuWYDXohUenT58O6heYwl00AbqH04VmRNHdjh07WjCPf1roozTTVz6PNBtNoY3VEOgJ7YmisQGffcSIEQsWLADBn376iVXBhOM/cn6yf/9+3IjRo0f/8MMPlPM2B1NatGgRed7jM0b0c9Bk/fr1MANfBNOAOacjTMbu3bvT6TTOwerVq4NqRU7pGpqecRZUgFjFHRvwB0eRNd0WyVLwZpw6dQoi4k6y9jDj888/X7ZsGaNgewlYv//+++TJk1EGlISO7OjgU8+ePdHbgMtce/XqtWbNmtAC23BDwJFSSD9waFETizbhd955J+NC/vXXX7Nnz0Yxwo8rr7wy8jHce++9nDGwmx05ciTzRVfjo+TqBQuS27H7rkuXLrkanrvlYOITQZGp4UHwcxanhOOdSqUuueQS/Kxoh8HUmCeEQDL2Ar9y8ODBQRfYLAqDfJDC0WZcPIYXVKufcpjBLU4fh9OZtmxlv/rqKzYUHGxy3kCF0owg41NBSmBSOG8x8z0alzgWK5KlaBIXzqcrKirw9e64444mK4Qu3Lp1K/qAzST+HT5/JmKVfvnll0ZiUSG5Dhso5/AA0DiKrt+KJji5l19++fPPP5/RK3isnHPAPAjH4Ur9+iWUl1II6QelHOXEY3z3SpgrQRqSDXjpouBw+PBhdmic57PPLFhYAwGjRo3CEVm3bl3wEgfPGDMeJe49RAlKgrRfv36ZFc3OwJ4ff/xxxowZQeUgZR/EIcfAgQOhC5HDddIg4v1wwIUnG9RsLo3iGZPKV4xPBaMXfJ2QiOPMl5WVczBcXh6SDXjp+Q4iuz7ONk4fB0RNbtOz6+dVwtrwOYrdLB5lENnT8irn67eztUEUQ23UOw5v//79A/Zw0B5kSNkZYSmy6zdqHtVtvgshhf8HGYyJ8BVDwhChDO0Xmg3YexzAqKZk5YRDgCVgIfJrG5BBCt9O4CzE4752SCTKEmVlIXUD36NROMKGs4oAS8BC5DkE6CCFMLsJRynlOMrBYuA4mBiSDSgojvzyHIetHjECLAELEUIoNJJKoR+UUo6qCSYTQlbQpL6DFpTYtMgIRLQEcEMIKYUhiAgZOM8hSilDtrfNCkBASgn4xJAy8Dj8DxTm05XgRpAQQ1qKYBAcNofTVEFzm4ZGANgBP3RzPlix9lrz5VKzRzWRXx32/1ME49Banzx5Msi3gfQcmgKwA37IAftcoC0StIYQnge50iYtSDcgEUeGUznIhe7i1sZWRQCQgRrAgT1sR3CB6KsGrbXnMwE2uKmU6xbKBsbEyDhSzH+rQ1Mb80MAkIEawPNr1kRtbQLMggdp5HFskUolI/q3T4hGdxERTNfcktoYCQIBmAALvMTgtjDJRobW2IiAC6lUKskfaQS6ITMyXFyUGOStqqpi9FprNJuNoREAQGAETCAFWODNQB0+wy6CDQSGwsNGeK6bMn+QAelR6Yb6g4NvfBZi9EeOHDlkQwEIACAwAiaQ1ke4sLxPB09rYybcNGYiRfDpUB2RpShsfLZ1URHQBKE9beiQdtOoB+hgopuK0lIUdU62s/wRgAa6wX7CS2Mu0mwuazKlzIb8p2tb5EYA96WWCjgOGtWgCSgITZYfEy0bcuPXtp74bPD8OWkTfEqYjKFBzWXZ4OPTDhK+VLpuum6ihgiNL8uGOnzadg424Co2P0fLhubxaSNPHcdJ+95i8/OxbGgenzbyFMVQXZ0842QsG84I0TlfIRaLoRiIwUxwJ4NMdmrZkI1JmyrBRrD8HG/XzsocONTmG//mw4bGbe19qSMAFbARlZWVntccCTLTsGzIQNHWMhiIgArYCNRDML1MJrhtlFo2NAKkLdyiEuLxuOd5FRUVUEGIzL9dPYOGsGwQbSPw0qMJ0AeJREIIiXUgcrpEuagN9fO1ZQ1+/w8AAP//xH2jsgAAAAZJREFUAwCIq26WqbA3YwAAAABJRU5ErkJggg==',
+      paste:  'data:image/png;base64,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',
+    };
+    // ──────────────────────────────────────────────────────────────────
+
+    const LS_KEY = 'module-card-v1';
+
+    function loadState() {
+      try {
+        return JSON.parse(localStorage.getItem(LS_KEY)) || defaultState();
+      } catch {
+        return defaultState();
+      }
+    }
+
+    function defaultState() {
+      return {
+        apiKey: '',
+        mode: 'ai',
+        profile: { name: '' },
+        elements: {
+          kaze:    { answers: [], summary: '' },
+          tama:    { answers: [], summary: '' },
+          hand:    { answers: [], summary: '' },
+          core:    { answers: [], summary: '' },
+          ku:      { answers: [], summary: '' },
+          calling: { answers: [], summary: '' },
+        }
+      };
+    }
+
+    function saveState() {
+      localStorage.setItem(LS_KEY, JSON.stringify(STATE));
+    }
+
+    // ─── スナップショット管理 ──────────────────────────────────────────
+    const SNAPSHOTS_KEY = 'module-card-snapshots-v1';
+
+    function loadSnapshots() {
+      try {
+        return JSON.parse(localStorage.getItem(SNAPSHOTS_KEY)) || [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveSnapshot(name) {
+      const snapshots = loadSnapshots();
+      const now = new Date();
+      const date = `${now.getFullYear()}-${padTwo(now.getMonth()+1)}-${padTwo(now.getDate())}`;
+      const snap = {
+        id: 'snap-' + now.getTime(),
+        name: name,
+        date: date,
+        profile: { name: STATE.profile.name },
+        elements: {}
+      };
+      ELEMENT_KEYS.forEach(key => {
+        snap.elements[key] = { summary: STATE.elements[key].summary };
+      });
+      snapshots.push(snap);
+      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snapshots));
+    }
+
+    function deleteSnapshot(id) {
+      const snapshots = loadSnapshots().filter(s => s.id !== id);
+      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snapshots));
+    }
+
+    function confirmDeleteSnapshot(id) {
+      const snap = loadSnapshots().find(s => s.id === id);
+      const name = snap ? snap.name : '';
+      if (confirm(`「${name}」を削除しますか？`)) {
+        deleteSnapshot(id);
+        renderHistory();
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────
+
+    let STATE = loadState();
+    let QF = { key: null, index: 0 };
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function padTwo(n) { return String(n).padStart(2, '0'); }
+
+    // ─── テーマ管理 ───────────────────────────────────────────────
+    const THEME_KEY = 'module-card-theme';
+
+    function loadTheme() {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved) return saved;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem(THEME_KEY, theme);
+      const btn = document.getElementById('theme-toggle');
+      if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    }
+
+    // ページ読み込み直後にテーマ適用（チラつき防止）
+    applyTheme(loadTheme());
+    // ──────────────────────────────────────────────────────────────
+
+    const SCREENS = ['setup-screen','main-screen','question-screen','preview-screen','history-screen'];
+
+    function showScreen(id) {
+      SCREENS.forEach(s => {
+        document.getElementById(s).style.display = (s === id) ? 'block' : 'none';
+      });
+    }
+
+    function renderSetup() {
+      const screen = document.getElementById('setup-screen');
+      screen.innerHTML = `
+        <div class="app-wrap">
+          <div style="text-align:center; padding: 32px 0 24px;">
+            <div style="font-size:32px; margin-bottom:8px;">🧩</div>
+            <h1 style="font-size:20px; font-weight:bold; color:var(--primary-dark); margin-bottom:4px;">モジュールカード</h1>
+            <p style="font-size:12px; color:var(--text-muted);">あなたの6要素を明確にするカードを作ろう</p>
+          </div>
+
+          <div id="setup-ai-section">
+            <label for="api-key-input" style="display:block; font-size:13px; font-weight:bold; margin-bottom:6px; color:var(--text);">
+              Gemini APIキー
+            </label>
+            <input id="api-key-input" type="password" placeholder="AIzaSy..."
+              style="width:100%; padding:10px 12px; border:1px solid var(--border);
+                     border-radius:8px; font-size:14px; background:var(--input-bg);
+                     outline:none; margin-bottom:8px;"
+              value="${escapeHtml(STATE.apiKey)}">
+            <div style="display:flex; align-items:center; justify-content:space-between;
+                      margin-bottom:8px;">
+              <p style="font-size:11px; color:var(--text-muted); margin:0;">
+                <a href="https://aistudio.google.com/app/apikey" target="_blank"
+                   style="color:var(--primary);">Google AI Studio</a>で無料取得できます
+              </p>
+              <button id="guide-toggle-btn" onclick="toggleGuide()"
+                style="font-size:11px; color:var(--primary); background:none; border:none;
+                       cursor:pointer; padding:0; white-space:nowrap; margin-left:8px;">
+                取得方法を見る ▼
+              </button>
+            </div>
+
+            <!-- APIキー取得ガイド -->
+            <div id="api-guide" style="display:none; background:var(--tag-bg);
+                 border:1px solid var(--border); border-radius:8px;
+                 padding:12px 14px; margin-bottom:16px; font-size:12px;">
+              <ol style="padding-left:18px; line-height:2;">
+                <li>Google アカウントにログイン</li>
+                <li>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank"
+                    style="color:var(--primary);">Google AI Studio</a> を開く
+                </li>
+                <li>
+                  以下のボタンを押す<br>
+                  <img src="${GUIDE_IMGS.create}" style="height:28px; margin-top:4px; border-radius:4px;">
+                  <div style="margin-top:6px; padding:8px; background:var(--card-bg);
+                              border-radius:6px; font-size:11px; color:var(--text-muted);
+                              border:1px solid var(--border); line-height:1.6;">
+                    💡 プロジェクト選択画面が出たら、既存のものを選んで「作成」<br>
+                    　 なければ「新しいプロジェクトで API キーを作成」でOK
+                  </div>
+                </li>
+                <li>
+                  キーが表示されたら以下を押す<br>
+                  <img src="${GUIDE_IMGS.copy}" style="height:28px; margin-top:4px; border-radius:4px;">
+                </li>
+                <li>
+                  下の入力欄にペースト<br>
+                  <img src="${GUIDE_IMGS.paste}" style="max-width:100%; margin-top:4px; border-radius:4px; opacity:0.8;">
+                </li>
+              </ol>
+            </div>
+
+          </div>
+
+          <label style="display:flex; align-items:center; gap:10px; margin-bottom:24px;
+                        font-size:13px; cursor:pointer;">
+            <input id="manual-mode-cb" type="checkbox" ${STATE.mode === 'manual' ? 'checked' : ''}
+              style="width:16px; height:16px; cursor:pointer;"
+              onchange="toggleManualMode(this.checked)">
+            AIなしモードで使う（質問をヒントとして表示、自分で入力）
+          </label>
+
+          <label for="profile-name-input" style="display:block; font-size:13px; font-weight:bold; margin-bottom:6px;">
+            あなたの名前（任意）
+          </label>
+          <input id="profile-name-input" type="text" placeholder="例：田中さん"
+            style="width:100%; padding:10px 12px; border:1px solid var(--border);
+                   border-radius:8px; font-size:14px; background:var(--input-bg);
+                   outline:none; margin-bottom:24px;"
+            value="${escapeHtml(STATE.profile.name)}">
+
+          <button onclick="submitSetup()"
+            style="width:100%; padding:14px; background:var(--primary); color:white;
+                   border:none; border-radius:10px; font-size:16px; font-weight:bold;
+                   cursor:pointer;">
+            はじめる →
+          </button>
+        </div>
+      `;
+    }
+
+    // ─── 保存ダイアログ ────────────────────────────────────────────────
+    function showSaveDialog() {
+      if (document.getElementById('save-dialog')) return;
+      const now = new Date();
+      const defaultName = `${now.getFullYear()}年${padTwo(now.getMonth()+1)}月${padTwo(now.getDate())}日`;
+
+      const overlay = document.createElement('div');
+      overlay.id = 'save-dialog';
+      overlay.style.cssText = [
+        'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.5)',
+        'z-index:300', 'display:flex', 'align-items:center',
+        'justify-content:center', 'padding:16px'
+      ].join(';');
+      overlay.innerHTML = `
+        <div style="background:var(--card-bg); border-radius:12px; padding:20px;
+                    width:100%; max-width:368px; box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+          <h3 style="font-size:16px; font-weight:bold; color:var(--text); margin-bottom:4px;">
+            📸 このカードを保存
+          </h3>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+            現在の6要素の一文をスナップショットとして記録します
+          </p>
+          <label style="font-size:13px; color:var(--text-muted); display:block; margin-bottom:6px;">
+            スナップショット名（任意）
+          </label>
+          <input id="snapshot-name-input" type="text"
+            placeholder="${defaultName}"
+            style="width:100%; padding:10px; border:1px solid var(--border); border-radius:8px;
+                   font-size:14px; background:var(--input-bg); color:var(--text);
+                   outline:none; margin-bottom:16px;">
+          <div style="display:flex; gap:8px;">
+            <button onclick="dismissSaveDialog()"
+              style="flex:1; padding:10px; background:var(--tag-bg); color:var(--text);
+                     border:1px solid var(--border); border-radius:8px;
+                     font-size:14px; cursor:pointer;">
+              キャンセル
+            </button>
+            <button onclick="confirmSaveSnapshot()"
+              style="flex:2; padding:10px; background:var(--primary); color:white;
+                     border:none; border-radius:8px; font-size:14px;
+                     font-weight:bold; cursor:pointer;">
+              保存する
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      setTimeout(() => {
+        const input = document.getElementById('snapshot-name-input');
+        if (input) input.focus();
+      }, 50);
+    }
+
+    function dismissSaveDialog() {
+      const el = document.getElementById('save-dialog');
+      if (el) el.remove();
+    }
+
+    function confirmSaveSnapshot() {
+      const input = document.getElementById('snapshot-name-input');
+      const now = new Date();
+      const fallback = `${now.getFullYear()}年${padTwo(now.getMonth()+1)}月${padTwo(now.getDate())}日`;
+      const name = (input ? input.value.trim() : '') || fallback;
+      saveSnapshot(name);
+      dismissSaveDialog();
+      const toast = document.createElement('div');
+      toast.style.cssText = [
+        'position:fixed', 'bottom:80px', 'left:50%',
+        'transform:translateX(-50%)', 'background:#0284c7',
+        'color:white', 'padding:10px 20px', 'border-radius:20px',
+        'font-size:13px', 'font-weight:bold', 'z-index:300',
+        'box-shadow:0 4px 12px rgba(0,0,0,0.3)', 'white-space:nowrap'
+      ].join(';');
+      toast.textContent = `「${name}」として保存しました ✓`;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 2500);
+    }
+    // ──────────────────────────────────────────────────────────────────
+
+    function toggleGuide() {
+      const el  = document.getElementById('api-guide');
+      const btn = document.getElementById('guide-toggle-btn');
+      const open = el.style.display === 'none';
+      el.style.display  = open ? 'block' : 'none';
+      btn.textContent   = open ? '閉じる ▲' : '取得方法を見る ▼';
+    }
+
+        function toggleManualMode(isManual) {
+      const section = document.getElementById('setup-ai-section');
+      if (section) section.style.opacity = isManual ? '0.4' : '1';
+    }
+
+    function submitSetup() {
+      const apiKey = document.getElementById('api-key-input').value.trim();
+      const isManual = document.getElementById('manual-mode-cb').checked;
+      const name = document.getElementById('profile-name-input').value.trim();
+
+      if (!isManual && !apiKey) {
+        alert('APIキーを入力するか「AIなしモード」を選択してください');
+        return;
+      }
+
+      STATE.apiKey = apiKey;
+      STATE.mode = isManual ? 'manual' : 'ai';
+      STATE.profile.name = name;
+      saveState();
+
+      showScreen('main-screen');
+      renderMain();
+    }
+
+    function renderMain() {
+      const screen = document.getElementById('main-screen');
+      const doneCount = ELEMENT_KEYS.filter(k => STATE.elements[k].summary).length;
+      const allFiveDone = ['kaze','tama','hand','core','ku'].every(k => STATE.elements[k].summary);
+
+      const cardsHTML = ELEMENT_KEYS.map(key => {
+        if (key === 'calling') return renderCallingCard(allFiveDone);
+        return renderElementCard(key);
+      }).join('');
+
+      screen.innerHTML = `
+        <div class="app-wrap">
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      margin-bottom:10px; padding-top:8px;">
+            <h1 style="font-size:17px; font-weight:bold; color:var(--primary-dark);">
+              🧩 モジュールカード
+            </h1>
+            <span style="font-size:12px; background:var(--tag-bg); color:var(--tag-text);
+                         padding:4px 10px; border-radius:20px; font-weight:bold;">
+              ${doneCount}/6 完了
+            </span>
+          </div>
+
+          <div style="display:flex; gap:8px; margin-bottom:20px;">
+            <button onclick="showSaveDialog()"
+              style="flex:1; padding:8px 0; background:var(--tag-bg); color:var(--tag-text);
+                     border:1px solid var(--border); border-radius:8px;
+                     font-size:13px; font-weight:bold; cursor:pointer;">
+              📸 保存する
+            </button>
+            <button onclick="showScreen('history-screen'); renderHistory();"
+              style="flex:1; padding:8px 0; background:var(--tag-bg); color:var(--tag-text);
+                     border:1px solid var(--border); border-radius:8px;
+                     font-size:13px; font-weight:bold; cursor:pointer;">
+              📋 履歴を見る
+            </button>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            ${cardsHTML}
+          </div>
+
+          <div style="height:16px;"></div>
+        </div>
+
+        <!-- フローティングプレビューボタン -->
+        <div style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+                    z-index:10;">
+          <button onclick="showScreen('preview-screen'); if(typeof renderPreview==='function') renderPreview();"
+            style="padding:12px 24px; background:var(--primary); color:white;
+                   border:2px solid var(--primary-light); border-radius:24px;
+                   font-size:14px; font-weight:bold; cursor:pointer;
+                   box-shadow:0 0 0 3px rgba(14,165,233,0.25), 0 4px 20px rgba(14,165,233,0.5);">
+            🧩 カードをプレビュー
+          </button>
+        </div>
+      `;
+    }
+
+    function renderElementCard(key) {
+      const meta = ELEMENT_META[key];
+      const el = STATE.elements[key];
+      const isDone = !!el.summary;
+
+      return `
+        <div style="border:1px solid var(--border); border-radius:12px; overflow:hidden;
+                    background:var(--card-bg);">
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      padding:12px 14px;
+                      background:${isDone ? 'var(--primary-dark)' : 'var(--primary)'};
+                      color:white;">
+            <span style="font-weight:bold; font-size:14px;">
+              ${isDone ? '✓ ' : ''}${meta.icon} ${meta.label}
+            </span>
+            ${isDone ? `<button onclick="editElement('${key}')"
+              style="font-size:11px; padding:3px 10px; background:rgba(255,255,255,0.2);
+                     color:white; border:1px solid rgba(255,255,255,0.4); border-radius:12px;
+                     cursor:pointer;">編集</button>` : ''}
+          </div>
+          <div style="padding:4px 14px 2px; background:var(--tag-bg);">
+            <span style="font-size:10px; color:var(--tag-text);">${meta.tag}</span>
+          </div>
+          <div style="padding:12px 14px;">
+            ${isDone
+              ? `<p style="font-size:14px; color:var(--text); line-height:1.6;">${escapeHtml(el.summary)}</p>`
+              : `<p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">${meta.desc}</p>
+                 <button onclick="startElement('${key}')"
+                   style="width:100%; padding:10px; background:var(--primary); color:white;
+                          border:none; border-radius:8px; font-size:13px; cursor:pointer;">
+                   ${STATE.mode === 'ai' ? '💬 質問に答える' : '✏️ 直接入力する'}
+                 </button>`
+            }
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCallingCard(allFiveDone) {
+      const el = STATE.elements.calling;
+      const isDone = !!el.summary;
+      const meta = ELEMENT_META.calling;
+
+      return `
+        <div style="border:1px solid #7dd3fc; border-radius:12px; overflow:hidden;
+                    background:var(--card-bg);">
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      padding:12px 14px; background:var(--primary-dark); color:white;">
+            <span style="font-weight:bold; font-size:14px;">${meta.icon} ${meta.label}</span>
+            ${isDone ? `<button onclick="editElement('calling')"
+              style="font-size:11px; padding:3px 10px; background:rgba(255,255,255,0.2);
+                     color:white; border:1px solid rgba(255,255,255,0.4); border-radius:12px;
+                     cursor:pointer;">編集</button>` : ''}
+          </div>
+          <div style="padding:4px 14px 2px; background:var(--tag-bg);">
+            <span style="font-size:10px; color:var(--tag-text); font-weight:600;">${meta.tag}</span>
+          </div>
+          <div style="padding:12px 14px;">
+            ${isDone
+              ? `<p style="font-size:14px; color:var(--text); line-height:1.6;">${escapeHtml(el.summary)}</p>`
+              : allFiveDone
+                ? `<button onclick="deriveCallingSummary()"
+                    style="width:100%; padding:10px; background:var(--primary-dark); color:white;
+                           border:none; border-radius:8px; font-size:13px; cursor:pointer;">
+                    ✨ コーリングを導出する
+                   </button>`
+                : `<p style="font-size:12px; color:var(--text-muted);">
+                    他の5要素が完了するとコーリングを自動導出できます
+                   </p>`
+            }
+          </div>
+        </div>
+      `;
+    }
+
+    function startElement(key) {
+      if (STATE.mode === 'ai') {
+        if (typeof openQuestionFlow === 'function') openQuestionFlow(key, 0);
+      } else {
+        if (typeof openManualInput === 'function') openManualInput(key);
+      }
+    }
+
+    function editElement(key) {
+      if (key === 'calling') {
+        if (typeof openManualEdit === 'function') openManualEdit(key);
+        else if (typeof openManualInput === 'function') openManualInput(key);
+      } else if (STATE.mode === 'ai') {
+        if (typeof openQuestionFlow === 'function') openQuestionFlow(key, 0);
+      } else {
+        if (typeof openManualInput === 'function') openManualInput(key);
+      }
+    }
+
+    function openManualInput(key) {
+      const meta = ELEMENT_META[key];
+      const el = STATE.elements[key];
+      const screen = document.getElementById('question-screen');
+
+      screen.innerHTML = `
+        <div class="app-wrap">
+          <button onclick="showScreen('main-screen'); renderMain();"
+            style="font-size:13px; color:var(--primary); background:none; border:none;
+                   cursor:pointer; padding:0; margin-bottom:16px;">← 戻る</button>
+          <h2 style="font-size:16px; font-weight:bold; margin-bottom:4px; color:var(--primary-dark);">
+            ${meta.icon} ${meta.label}
+          </h2>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">${meta.tag}</p>
+          <textarea id="manual-text" rows="4"
+            style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;
+                   font-size:14px; resize:vertical; outline:none; background:var(--input-bg);"
+            placeholder="一文で表してください（例：デザインを通じて見えないものを可視化すること）"
+          >${el.summary}</textarea>
+          <button onclick="confirmManualInput('${key}')"
+            style="width:100%; margin-top:12px; padding:12px; background:var(--primary); color:white;
+                   border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
+            確定
+          </button>
+        </div>
+      `;
+      showScreen('question-screen');
+    }
+
+    function confirmManualInput(key) {
+      const text = document.getElementById('manual-text').value.trim();
+      if (!text) { alert('テキストを入力してください'); return; }
+      STATE.elements[key].summary = text;
+      saveState();
+      showScreen('main-screen');
+      renderMain();
+    }
+
+    function openManualEdit(key) {
+      openManualInput(key);
+    }
+
+    function openQuestionFlow(key, startIndex) {
+      QF.key = key;
+      QF.index = startIndex;
+      showScreen('question-screen');
+      renderQuestion();
+    }
+
+    function renderQuestion() {
+      const { key, index } = QF;
+      const meta = ELEMENT_META[key];
+      const questions = QUESTIONS[key];
+      const total = questions.length;
+      const el = STATE.elements[key];
+      const currentAnswer = el.answers[index] || '';
+
+      const screen = document.getElementById('question-screen');
+      screen.innerHTML = `
+        <div class="app-wrap">
+          <button onclick="showScreen('main-screen'); renderMain();"
+            style="font-size:13px; color:var(--primary); background:none; border:none;
+                   cursor:pointer; padding:0; margin-bottom:16px;">← 戻る</button>
+
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      margin-bottom:12px;">
+            <span style="font-size:14px; font-weight:bold; color:var(--primary-dark);">
+              ${meta.icon} ${meta.label}
+            </span>
+            <span style="font-size:11px; color:var(--text-muted);">
+              ${index + 1} / ${total}
+            </span>
+          </div>
+
+          <!-- プログレスバー -->
+          <div style="height:4px; background:var(--border); border-radius:2px; margin-bottom:20px;">
+            <div style="height:100%; background:var(--primary); border-radius:2px;
+                        width:${((index + 1) / total * 100).toFixed(0)}%;
+                        transition:width 0.3s;"></div>
+          </div>
+
+          <p style="font-size:15px; font-weight:bold; line-height:1.6; margin-bottom:16px;
+                    color:var(--text);">${questions[index]}</p>
+
+          <textarea id="answer-text" rows="4"
+            style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;
+                   font-size:14px; resize:vertical; outline:none; background:var(--input-bg);
+                   margin-bottom:12px;"
+            placeholder="自由に答えてください（スキップもできます）"
+          >${currentAnswer}</textarea>
+
+          <div style="display:flex; gap:8px; margin-bottom:20px;">
+            <button onclick="skipQuestion()"
+              style="flex:1; padding:10px; background:white; color:var(--text-muted);
+                     border:1px solid var(--border); border-radius:8px; font-size:13px; cursor:pointer;">
+              スキップ
+            </button>
+            <button onclick="nextQuestion()"
+              style="flex:2; padding:10px; background:var(--primary); color:white;
+                     border:none; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer;">
+              ${index < total - 1 ? '次の質問 →' : '最後の質問に回答'}
+            </button>
+          </div>
+
+          <hr style="border:none; border-top:1px solid var(--border); margin-bottom:20px;">
+
+          <button onclick="summarizeAnswers('${key}')"
+            style="width:100%; padding:12px; background:white; color:var(--primary-dark);
+                   border:2px solid var(--primary); border-radius:8px; font-size:14px;
+                   font-weight:bold; cursor:pointer;">
+            ✨ ここまでの回答で要約する
+          </button>
+        </div>
+      `;
+    }
+
+    function saveCurrentAnswer() {
+      const textEl = document.getElementById('answer-text');
+      if (!textEl) return;
+      const text = textEl.value || '';
+      const { key, index } = QF;
+      if (!STATE.elements[key].answers) STATE.elements[key].answers = [];
+      STATE.elements[key].answers[index] = text;
+      saveState();
+    }
+
+    function saveCurrentAnswerAs(val) {
+      const { key, index } = QF;
+      if (!STATE.elements[key].answers) STATE.elements[key].answers = [];
+      STATE.elements[key].answers[index] = val;
+      saveState();
+    }
+
+    function skipQuestion() {
+      saveCurrentAnswerAs('');
+      advanceQuestion();
+    }
+
+    function nextQuestion() {
+      saveCurrentAnswer();
+      advanceQuestion();
+    }
+
+    function advanceQuestion() {
+      const total = QUESTIONS[QF.key].length;
+      if (QF.index < total - 1) {
+        QF.index++;
+        renderQuestion();
+      } else {
+        // 全問回答済み → 要約へ
+        if (typeof summarizeAnswers === 'function') {
+          summarizeAnswers(QF.key);
+        }
+      }
+    }
+
+    async function callGemini(prompt) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${STATE.apiKey}`;
+      const body = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 100, temperature: 0.7 }
+      };
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    }
+
+    function buildSummaryPrompt(key) {
+      const meta = ELEMENT_META[key];
+      const questions = QUESTIONS[key] || [];
+      const answers = STATE.elements[key].answers || [];
+
+      const pairs = questions
+        .map((q, i) => ({ q, a: answers[i] || '' }))
+        .filter(({ a }) => a.trim() !== '');
+
+      if (pairs.length === 0) {
+        return `あなたはパーソナリティ探求の専門家です。
+「わたしの${meta.name}（${meta.tag}）」を一文（30字以内）で表してください。
+回答が空でも、要素の性質から一般的な例を1つ作ってください。
+一文のみ出力。余分な説明は不要です。`;
+      }
+
+      const qaText = pairs.map(({ q, a }) => `Q: ${q}\nA: ${a}`).join('\n\n');
+
+      return `あなたはパーソナリティ探求の専門家です。
+ユーザーが以下の質問に答えた内容を踏まえ、
+「わたしの${meta.name}（${meta.tag}）」を
+一文（30字以内）で表してください。
+
+[質問と回答]
+${qaText}
+
+一文のみ出力してください。余分な説明は不要です。`;
+    }
+
+    async function summarizeAnswers(key) {
+      saveCurrentAnswer();
+
+      const screen = document.getElementById('question-screen');
+      screen.innerHTML = `
+        <div class="app-wrap" style="text-align:center; padding-top:60px;">
+          <div style="font-size:32px; margin-bottom:16px;">✨</div>
+          <p style="font-size:15px; color:var(--text);">Geminiが要約中…</p>
+        </div>
+      `;
+
+      try {
+        const prompt = buildSummaryPrompt(key);
+        const result = await callGemini(prompt);
+        showProposalUI(key, result, null);
+      } catch (e) {
+        showProposalUI(key, '', e.message);
+      }
+    }
+
+    function showProposalUI(key, proposed, errorMsg) {
+      const meta = ELEMENT_META[key];
+      const screen = document.getElementById('question-screen');
+
+      screen.innerHTML = `
+        <div class="app-wrap">
+          <button onclick="showScreen('main-screen'); renderMain();"
+            style="font-size:13px; color:var(--primary); background:none; border:none;
+                   cursor:pointer; padding:0; margin-bottom:16px;">← 戻る</button>
+
+          <h2 style="font-size:16px; font-weight:bold; margin-bottom:16px; color:var(--primary-dark);">
+            ${meta.icon} ${meta.label} の要約
+          </h2>
+
+          ${errorMsg ? `<div style="padding:12px; background:#fef2f2; border-radius:8px;
+                                    color:#dc2626; font-size:12px; margin-bottom:16px;">
+            ⚠️ API エラー: ${escapeHtml(errorMsg)}<br>
+            <small>手動で入力してください。</small>
+          </div>` : ''}
+
+          <label style="display:block; font-size:13px; font-weight:bold; margin-bottom:6px;
+                        color:var(--text);">
+            一文で表すと（編集できます）
+          </label>
+          <textarea id="proposal-text" rows="3"
+            style="width:100%; padding:12px; border:2px solid var(--primary); border-radius:8px;
+                   font-size:14px; resize:vertical; outline:none; background:var(--input-bg);
+                   margin-bottom:12px;"
+          >${proposed}</textarea>
+
+          <button onclick="confirmSummary('${key}')"
+            style="width:100%; padding:12px; background:var(--primary); color:white;
+                   border:none; border-radius:8px; font-size:14px; font-weight:bold;
+                   cursor:pointer; margin-bottom:8px;">
+            確定してメインに戻る
+          </button>
+          <button onclick="openQuestionFlow('${key}', 0)"
+            style="width:100%; padding:10px; background:white; color:var(--text-muted);
+                   border:1px solid var(--border); border-radius:8px; font-size:13px;
+                   cursor:pointer;">
+            質問に戻る
+          </button>
+        </div>
+      `;
+    }
+
+    function confirmSummary(key) {
+      const text = document.getElementById('proposal-text').value.trim();
+      if (!text) { alert('テキストを入力してください'); return; }
+      STATE.elements[key].summary = text;
+      saveState();
+      showScreen('main-screen');
+      renderMain();
+    }
+
+    function buildCallingPrompt() {
+      const keys = ['kaze','tama','hand','core','ku'];
+      const summaries = keys.map(k => {
+        const meta = ELEMENT_META[k];
+        return `${meta.name}: ${STATE.elements[k].summary}`;
+      }).join('\n');
+
+      return `あなたはパーソナリティ探求の専門家です。
+以下の5要素を踏まえ、この人の「コーリング（魂からの問い・
+生涯をかけて取り組む探求）」を一文（30字以内）で表してください。
+
+${summaries}
+
+一文のみ出力してください。余分な説明は不要です。`;
+    }
+
+    async function deriveCallingSummary() {
+      // ローディング表示（メイン画面のボタンを更新）
+      const screen = document.getElementById('main-screen');
+      const btn = screen ? screen.querySelector('button[onclick*="deriveCallingSummary"]') : null;
+      if (btn) { btn.textContent = '✨ 導出中…'; btn.disabled = true; }
+
+      // question-screen をローディング状態にして表示
+      const qScreen = document.getElementById('question-screen');
+      qScreen.innerHTML = `
+        <div class="app-wrap" style="text-align:center; padding-top:60px;">
+          <div style="font-size:32px; margin-bottom:16px;">✨</div>
+          <p style="font-size:15px; color:var(--text);">コーリングを導出中…</p>
+          <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">5つの要素からGeminiが考えています</p>
+        </div>
+      `;
+      showScreen('question-screen');
+
+      try {
+        const prompt = buildCallingPrompt();
+        const result = await callGemini(prompt);
+        showCallingProposal(result, null);
+      } catch (e) {
+        showCallingProposal('', e.message);
+      }
+    }
+
+    function showCallingProposal(proposed, errorMsg) {
+      const screen = document.getElementById('question-screen');
+      const meta = ELEMENT_META.calling;
+
+      screen.innerHTML = `
+        <div class="app-wrap">
+          <button onclick="showScreen('main-screen'); renderMain();"
+            style="font-size:13px; color:var(--primary); background:none; border:none;
+                   cursor:pointer; padding:0; margin-bottom:16px;">← 戻る</button>
+
+          <h2 style="font-size:16px; font-weight:bold; margin-bottom:8px; color:var(--primary-dark);">
+            ${meta.icon} ${meta.label}
+          </h2>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
+            ${meta.tag}
+          </p>
+
+          ${errorMsg ? `<div style="padding:12px; background:#fef2f2; border-radius:8px;
+                                    color:#dc2626; font-size:12px; margin-bottom:16px;">
+            ⚠️ API エラー: ${escapeHtml(errorMsg)}
+          </div>` : ''}
+
+          <label style="display:block; font-size:13px; font-weight:bold; margin-bottom:6px;
+                        color:var(--text);">
+            一文で表すと（編集できます）
+          </label>
+          <textarea id="proposal-text" rows="3"
+            style="width:100%; padding:12px; border:2px solid var(--primary-dark); border-radius:8px;
+                   font-size:14px; resize:vertical; outline:none; background:var(--input-bg);
+                   margin-bottom:12px;"
+          >${proposed}</textarea>
+
+          <button onclick="confirmSummary('calling')"
+            style="width:100%; padding:12px; background:var(--primary-dark); color:white;
+                   border:none; border-radius:8px; font-size:14px; font-weight:bold;
+                   cursor:pointer;">
+            確定してメインに戻る
+          </button>
+        </div>
+      `;
+    }
+
+    // ─── 履歴画面 ──────────────────────────────────────────────────────
+    function renderHistory() {
+      const screen = document.getElementById('history-screen');
+      const snapshots = loadSnapshots();
+
+      screen.innerHTML = `
+        <div class="app-wrap">
+          <div style="display:flex; align-items:center; margin-bottom:20px; padding-top:8px;">
+            <button onclick="showScreen('main-screen'); renderMain();"
+              style="font-size:13px; color:var(--primary); background:none; border:none;
+                     cursor:pointer; padding:0; margin-right:auto;">
+              ← 戻る
+            </button>
+            <h1 style="font-size:17px; font-weight:bold; color:var(--primary-dark);">
+              📋 履歴
+            </h1>
+          </div>
+
+          ${snapshots.length === 0 ? `
+            <div style="text-align:center; padding:60px 0; color:var(--text-muted);">
+              <div style="font-size:48px; margin-bottom:16px;">📭</div>
+              <p style="font-size:14px; margin-bottom:8px;">まだ保存されたスナップショットがありません</p>
+              <p style="font-size:12px;">メイン画面の「📸 保存する」で記録できます</p>
+            </div>
+          ` : `
+            <div style="display:flex; margin-bottom:16px; border:1px solid var(--border);
+                        border-radius:8px; overflow:hidden;">
+              <button id="tab-list" onclick="switchHistoryTab('list')"
+                style="flex:1; padding:10px; font-size:13px; font-weight:bold;
+                       border:none; cursor:pointer;
+                       background:var(--primary); color:white;">
+                一覧
+              </button>
+              <button id="tab-timeline" onclick="switchHistoryTab('timeline')"
+                style="flex:1; padding:10px; font-size:13px; font-weight:bold;
+                       border:none; cursor:pointer;
+                       background:var(--card-bg); color:var(--text-muted);">
+                タイムライン
+              </button>
+            </div>
+            <div id="history-content">
+              ${renderHistoryList(snapshots)}
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function switchHistoryTab(tab) {
+      const snapshots = loadSnapshots();
+      document.getElementById('history-content').innerHTML =
+        tab === 'list' ? renderHistoryList(snapshots) : renderHistoryTimeline(snapshots);
+      const isList = tab === 'list';
+      const tabList = document.getElementById('tab-list');
+      const tabTL   = document.getElementById('tab-timeline');
+      tabList.style.background = isList ? 'var(--primary)' : 'var(--card-bg)';
+      tabList.style.color      = isList ? 'white' : 'var(--text-muted)';
+      tabTL.style.background   = isList ? 'var(--card-bg)' : 'var(--primary)';
+      tabTL.style.color        = isList ? 'var(--text-muted)' : 'white';
+    }
+
+    function renderHistoryList(snapshots) {
+      const sorted = [...snapshots].reverse();
+      return sorted.map(snap => `
+        <div style="background:var(--card-bg); border:1px solid var(--border);
+                    border-radius:12px; padding:14px; margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;
+                      margin-bottom:6px;">
+            <div>
+              <div style="font-size:14px; font-weight:bold; color:var(--text);">
+                ${escapeHtml(snap.name)}
+              </div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                ${escapeHtml(snap.date)}
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; flex-shrink:0; margin-left:8px;">
+              <button onclick="toggleSnapshotDetail('${snap.id}')"
+                id="snap-btn-${snap.id}"
+                style="font-size:12px; color:var(--primary); background:none;
+                       border:1px solid var(--border); border-radius:6px;
+                       padding:4px 10px; cursor:pointer;">
+                見る
+              </button>
+              <button onclick="confirmDeleteSnapshot('${snap.id}')"
+                style="font-size:12px; color:#ef4444; background:none;
+                       border:1px solid #fca5a5; border-radius:6px;
+                       padding:4px 8px; cursor:pointer;">
+                ✕
+              </button>
+            </div>
+          </div>
+          ${snap.elements.calling && snap.elements.calling.summary ? `
+            <div style="font-size:12px; color:var(--text-muted); font-style:italic;
+                        border-top:1px solid var(--border); padding-top:8px; margin-top:6px;
+                        line-height:1.5;">
+              ✨ ${escapeHtml(snap.elements.calling.summary)}
+            </div>
+          ` : ''}
+          <div id="snap-detail-${snap.id}" style="display:none; margin-top:12px;
+               border-top:1px solid var(--border); padding-top:12px;">
+            ${ELEMENT_KEYS.map(key => {
+              const meta = ELEMENT_META[key];
+              const summary = snap.elements[key] && snap.elements[key].summary;
+              if (!summary) return '';
+              return `
+                <div style="margin-bottom:10px;">
+                  <div style="font-size:11px; font-weight:bold; color:var(--primary-dark);">
+                    ${meta.icon} ${meta.label}
+                  </div>
+                  <div style="font-size:13px; color:var(--text); margin-top:3px;
+                              padding-left:4px; line-height:1.5;">
+                    ${escapeHtml(summary)}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderHistoryTimeline(snapshots) {
+      if (snapshots.length === 0) {
+        return '<p style="text-align:center; color:var(--text-muted); padding:40px 0;">データがありません</p>';
+      }
+      const sorted = [...snapshots]; // 古い順（保存順）
+
+      return ELEMENT_KEYS.map(key => {
+        const meta    = ELEMENT_META[key];
+        const entries = sorted.filter(s => s.elements[key] && s.elements[key].summary);
+        if (entries.length === 0) return '';
+
+        return `
+          <div style="margin-bottom:24px;">
+            <div style="font-size:14px; font-weight:bold; color:var(--primary-dark);
+                        padding-bottom:8px; margin-bottom:12px;
+                        border-bottom:2px solid var(--primary-light);">
+              ${meta.icon} ${meta.label}
+            </div>
+            ${entries.map((snap, i) => {
+              const isLast = i === entries.length - 1;
+              return `
+                <div style="display:flex; gap:12px; margin-bottom:${isLast ? '0' : '4px'};">
+                  <div style="display:flex; flex-direction:column; align-items:center;
+                              flex-shrink:0; padding-top:4px;">
+                    <div style="width:10px; height:10px; border-radius:50%;
+                                background:var(--primary); flex-shrink:0;"></div>
+                    ${!isLast ? `
+                      <div style="width:2px; flex:1; background:var(--border);
+                                  min-height:20px; margin-top:2px;"></div>
+                    ` : ''}
+                  </div>
+                  <div style="flex:1; padding-bottom:${isLast ? '0' : '12px'};">
+                    <div style="font-size:11px; color:var(--text-muted); margin-bottom:2px;">
+                      ${escapeHtml(snap.date)}
+                      ${snap.name !== snap.date ? ` · <em>${escapeHtml(snap.name)}</em>` : ''}
+                    </div>
+                    <div style="font-size:13px; color:var(--text); line-height:1.5;">
+                      ${escapeHtml(snap.elements[key].summary)}
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleSnapshotDetail(id) {
+      const detail = document.getElementById('snap-detail-' + id);
+      const btn    = document.getElementById('snap-btn-' + id);
+      if (!detail) return;
+      const isOpen = detail.style.display !== 'none';
+      detail.style.display = isOpen ? 'none' : 'block';
+      if (btn) btn.textContent = isOpen ? '見る' : '閉じる';
+    }
+    // ──────────────────────────────────────────────────────────────────
+
+    function renderPreview() {
+      const screen = document.getElementById('preview-screen');
+      const name = STATE.profile.name || 'あなた';
+
+      function gridCard(key, extraClass) {
+        extraClass = extraClass || '';
+        const meta = ELEMENT_META[key];
+        const summary = STATE.elements[key].summary || '（未入力）';
+        const tagShort = meta.tag.length > 20 ? meta.tag.substring(0, 20) + '…' : meta.tag;
+        return `
+          <div class="el ${extraClass}">
+            <div class="el-h">${meta.icon} ${meta.label}</div>
+            <div class="el-d">${tagShort}</div>
+            <div class="el-c">${escapeHtml(summary)}</div>
+          </div>`;
+      }
+
+      screen.innerHTML = `
+        <div style="background:var(--bg); min-height:100vh; padding:16px;">
+
+          <!-- ヘッダー -->
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      max-width:400px; margin:0 auto 12px;">
+            <button onclick="showScreen('main-screen'); renderMain();"
+              style="font-size:13px; color:var(--primary); background:none; border:none;
+                     cursor:pointer; padding:0;">← 編集に戻る</button>
+            <button onclick="downloadPNG()"
+              style="padding:8px 16px; background:var(--primary); color:white; border:none;
+                     border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer;">
+              📥 PNGで保存
+            </button>
+          </div>
+
+          <!-- カード本体（キャプチャ対象） -->
+          <div id="card-export"
+            style="background:var(--card-bg); border-radius:20px; padding:20px 16px 24px;
+                   max-width:400px; margin:0 auto;
+                   box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+
+            <div style="text-align:center; font-size:14px; font-weight:bold;
+                        letter-spacing:0.2em; margin-bottom:4px; color:var(--tag-text);">
+              モジュールカード
+            </div>
+            <div style="text-align:center; font-size:10px; color:var(--text-muted); margin-bottom:14px;">
+              @${escapeHtml(name)}
+            </div>
+
+            <!-- SVGパズルピース -->
+            <div style="margin-bottom:16px;">
+              <svg width="100%" viewBox="0 0 840 710" xmlns="http://www.w3.org/2000/svg"
+                   role="img" aria-labelledby="puzzle-title">
+                <title id="puzzle-title">モジュールカードの6要素図：風・玉・ハンド・コア・コーリング・空</title>
+                <defs>
+                  <marker id="pzarr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+                    <polygon points="0 0, 9 3.5, 0 7" fill="#054a4a"/>
+                  </marker>
+                </defs>
+
+                <!-- パズルピース本体：上=風(凸) 右=玉(凸) 下=ハンド(凸) 左=空(凹) -->
+                <path id="pz-body" fill="#cce9f0" stroke="#1a7878" stroke-width="2.5"
+                  d="M 224 142
+                     L 383 142
+                     C 381 131, 375 109, 378 96
+                     C 381 83, 397 75, 420 75
+                     C 443 75, 459 83, 462 96
+                     C 465 109, 459 131, 457 142
+                     L 616 142 Q 628 142 628 154
+                     L 628 322
+                     C 638 320, 660 312, 669 318
+                     C 678 324, 688 340, 688 357
+                     C 688 374, 678 390, 669 396
+                     C 660 402, 638 394, 628 392
+                     L 628 560 Q 628 572 616 572
+                     L 457 572
+                     C 459 583, 465 605, 462 618
+                     C 459 631, 443 639, 420 639
+                     C 397 639, 381 631, 378 618
+                     C 375 605, 381 583, 383 572
+                     L 224 572 Q 212 572 212 560
+                     L 212 392
+                     C 220 390, 248 397, 258 391
+                     C 268 385, 278 372, 278 357
+                     C 278 342, 268 329, 258 323
+                     C 248 317, 220 324, 212 322
+                     L 212 154 Q 212 142 224 142
+                     Z"/>
+
+                <!-- コーリング（上半） -->
+                <text x="420" y="308" text-anchor="middle" font-size="40" font-weight="bold"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">コーリング</text>
+                <text x="420" y="345" text-anchor="middle" font-size="17"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">魂からの問い</text>
+                <text x="420" y="365" text-anchor="middle" font-size="17"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">生涯かけて取り組む探求</text>
+
+                <!-- コア（下半） -->
+                <text x="420" y="455" text-anchor="middle" font-size="36" font-weight="bold"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">コア</text>
+                <text x="420" y="488" text-anchor="middle" font-size="17"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">変わらない自分の本質</text>
+
+                <!-- 風（上ノブ） -->
+                <text x="420" y="37" text-anchor="middle" font-size="18"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">好きでたまらん</text>
+                <text x="420" y="118" text-anchor="middle" font-size="38" font-weight="bold"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">風</text>
+                <line x1="453" y1="106" x2="502" y2="86" stroke="#054a4a" stroke-width="1.3"/>
+                <text x="507" y="75" font-size="15" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">止められても</text>
+                <text x="507" y="94" font-size="15" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">やりたい</text>
+                <text x="507" y="113" font-size="15" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">生まれ持っての関心</text>
+
+                <!-- 玉（右ノブ） -->
+                <text x="675" y="296" font-size="18" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">できる</text>
+                <text x="651" y="366" text-anchor="middle" font-size="38" font-weight="bold"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">玉</text>
+                <line x1="670" y1="357" x2="748" y2="336" stroke="#054a4a" stroke-width="1.3"/>
+                <text x="753" y="326" font-size="15" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">社会で磨いた</text>
+                <text x="753" y="345" font-size="15" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">役割や技術</text>
+
+                <!-- ハンド（下ノブ） -->
+                <text x="420" y="584" writing-mode="vertical-rl" text-anchor="middle"
+                      font-size="23" font-weight="bold"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">ハンド</text>
+                <line x1="468" y1="628" x2="512" y2="608" stroke="#054a4a" stroke-width="1.3"/>
+                <text x="517" y="588" font-size="15" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">他者に手を</text>
+                <text x="517" y="607" font-size="15" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">差し伸べられる</text>
+                <text x="517" y="626" font-size="15" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">スキル</text>
+                <text x="420" y="690" text-anchor="middle" font-size="18"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">気軽に役に立ちたい</text>
+
+                <!-- 空（左ノッチ＝凹み） -->
+                <!-- 苦手ラベル：ノッチ上 -->
+                <text x="196" y="320" text-anchor="end" font-size="14"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">苦手</text>
+                <!-- 空ラベル：凹の中央 -->
+                <text x="248" y="368" text-anchor="middle" font-size="32" font-weight="bold"
+                      fill="#054a4a" font-family="'Hiragino Sans','Noto Sans JP',sans-serif">空</text>
+
+                <!-- 左端：縦書き説明（パズル左側に沿って配置） -->
+                <text x="110" y="478" writing-mode="vertical-rl" font-size="16" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">接続できる</text>
+                <text x="91" y="428" writing-mode="vertical-rl" font-size="16" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">モジュール同士が</text>
+                <text x="72" y="410" writing-mode="vertical-rl" font-size="16" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">この空白があるから</text>
+                <!-- 注釈テキスト（縦書きの下） -->
+                <text x="72" y="585" font-size="13" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">他者が自己を</text>
+                <text x="72" y="602" font-size="13" fill="#054a4a"
+                      font-family="'Hiragino Sans','Noto Sans JP',sans-serif">表現する空間</text>
+              </svg>
+            </div>
+
+            <!-- 要素グリッド（左列: 風・玉・ハンド、右列: コーリング・コア・空） -->
+            <div class="elements-grid">
+              ${gridCard('kaze')}
+              ${gridCard('calling', 'calling')}
+              ${gridCard('tama')}
+              ${gridCard('core')}
+              ${gridCard('hand')}
+              ${gridCard('ku', 'ku')}
+            </div>
+          </div>
+
+          <p style="text-align:center; font-size:11px; color:var(--text-muted);
+                    margin-top:12px; max-width:400px; margin:12px auto 0;">
+            ※ PNGで保存するとカード部分が画像でダウンロードされます
+          </p>
+        </div>
+      `;
+    }
+
+    function loadHtml2Canvas() {
+      return new Promise((resolve, reject) => {
+        if (typeof html2canvas !== 'undefined') { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('html2canvas の読み込みに失敗しました'));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function downloadPNG() {
+      const btn = document.querySelector('button[onclick="downloadPNG()"]');
+      if (btn) { btn.textContent = '処理中…'; btn.disabled = true; }
+
+      try {
+        await loadHtml2Canvas();
+        const target = document.getElementById('card-export');
+        const canvas = await html2canvas(target, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+        });
+
+        const link = document.createElement('a');
+        const safeName = (STATE.profile.name || 'card').replace(/[^\w぀-鿿]/g, '_');
+        link.download = `module-card-${safeName}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      } catch (e) {
+        alert('PNG出力に失敗しました: ' + e.message);
+      } finally {
+        if (btn) { btn.textContent = '📥 PNGで保存'; btn.disabled = false; }
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!STATE.apiKey && STATE.mode !== 'manual') {
+        showScreen('setup-screen');
+        renderSetup();
+      } else {
+        showScreen('main-screen');
+        renderMain();
+      }
+    });
+  </script>
+</body>
+</html>

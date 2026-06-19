@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モジュールカードとは？</title>
+  <style>
+    :root {
+      --primary: #0277bd;
+      --primary-dark: #01579b;
+      --bg: #f0f9ff;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #bae6fd;
+      --tag-bg: #e0f2fe;
+      --tag-text: #0369a1;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 32px 20px 80px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    header h1 {
+      font-size: 24px;
+      color: var(--primary-dark);
+      margin-bottom: 8px;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    section {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+
+    section h2 {
+      font-size: 17px;
+      color: var(--primary-dark);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    section p {
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+
+    section p:last-child { margin-bottom: 0; }
+
+    .elements-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .el-card {
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .el-head {
+      background: var(--primary);
+      color: white;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .el-body {
+      background: var(--tag-bg);
+      color: var(--tag-text);
+      padding: 8px 12px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .steps {
+      list-style: none;
+      counter-reset: step;
+    }
+
+    .steps li {
+      counter-increment: step;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      min-width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .book-card {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .book-info h3 {
+      font-size: 15px;
+      color: var(--primary-dark);
+      margin-bottom: 4px;
+    }
+
+    .book-info p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .book-link {
+      display: inline-block;
+      font-size: 13px;
+      color: var(--primary);
+      text-decoration: none;
+      border: 1px solid var(--primary);
+      border-radius: 6px;
+      padding: 4px 12px;
+    }
+
+    .book-link:hover { background: var(--tag-bg); }
+
+    .cta {
+      text-align: center;
+      padding: 32px 24px;
+    }
+
+    .cta p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      line-height: 1.7;
+    }
+
+    .btn-primary {
+      display: inline-block;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      border-radius: 40px;
+      padding: 14px 40px;
+      font-size: 16px;
+      font-weight: bold;
+      box-shadow: 0 4px 12px rgba(2,119,189,0.3);
+      transition: background 0.2s;
+    }
+
+    .btn-primary:hover { background: var(--primary-dark); }
+
+    .nav-back {
+      text-align: center;
+      margin-top: 24px;
+    }
+
+    .nav-back a {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-decoration: none;
+    }
+
+    .nav-back a:hover { color: var(--primary); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <header>
+      <h1>🧩 モジュールカードとは？</h1>
+      <p>自分を構成する6つの要素を言語化して、<br>一枚のカードにまとめるツールです。</p>
+    </header>
+
+    <section>
+      <h2>モジュールカードについて</h2>
+      <p>「モジュールカード」は、ネドじゅん著『AI時代をどう生きる 右脳オカンの未来予言』（永岡書店）で紹介されているコンセプトをもとにしています。</p>
+      <p>AIが思考を担う時代に、人間が自分らしく輝くために「自分の好き・得意・在り方」を6つの要素として言語化し、カードとして可視化するものです。</p>
+    </section>
+
+    <section>
+      <h2>6つの要素</h2>
+      <div class="elements-grid">
+        <div class="el-card">
+          <div class="el-head">🌬 風</div>
+          <div class="el-body">好き・止められてもやりたいこと。原始的な衝動。</div>
+        </div>
+        <div class="el-card">
+          <div class="el-head">💎 玉</div>
+          <div class="el-body">技術・能力・経験。社会で磨いてきたこと。</div>
+        </div>
+        <div class="el-card">
+          <div class="el-head">🤝 ハンド</div>
+          <div class="el-body">他者に手を差し伸べられるスキルや役割。</div>
+        </div>
+        <div class="el-card">
+          <div class="el-head">🫀 コア</div>
+          <div class="el-body">変わらない本質・クセ・自分の在り方。</div>
+        </div>
+        <div class="el-card">
+          <div class="el-head">🌌 空</div>
+          <div class="el-body">他者に委ねる余白・苦手・手放すこと。</div>
+        </div>
+        <div class="el-card">
+          <div class="el-head">✨ コーリング</div>
+          <div class="el-body">5要素から導かれる、魂からの問い・生涯の探求。</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>使い方</h2>
+      <ol class="steps">
+        <li>ジェネレータを開き、名前を入力する</li>
+        <li>各要素の質問に答える（AIアシストあり・なし選べます）</li>
+        <li>6要素すべて入力すると「コーリング」が自動で導出される</li>
+        <li>カードをプレビューして PNG で保存・共有</li>
+      </ol>
+      <p style="margin-top:12px; color: var(--text-muted); font-size:13px;">※ AIアシストを使う場合は Gemini API キー（無料枠あり）が必要です。なしでも手動入力で使えます。</p>
+    <p style="margin-top:6px; font-size:13px;"><a href="./gemini-key.html" style="color: var(--primary);">🔑 Gemini APIキーの取得方法はこちら →</a></p>
+    </section>
+
+    <section>
+      <h2>元になった書籍</h2>
+      <div class="book-card">
+        <div class="book-info">
+          <h3>AI時代をどう生きる 右脳オカンの未来予言</h3>
+          <p>ネドじゅん 著 ／ 永岡書店（2026年）</p>
+          <a class="book-link" href="https://amzn.to/4w3l6Aa" target="_blank" rel="noopener">Amazonで見る →</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta">
+      <p>質問に答えていくだけで、<br>あなただけのモジュールカードが完成します。</p>
+      <a class="btn-primary" href="./index.html">🧩 カードをつくる</a>
+    </section>
+
+    <div class="nav-back">
+      <a href="./index.html">← ジェネレータに戻る</a>
+    </div>
+
+  </div>
+</body>
+</html>
